@@ -1,0 +1,4 @@
+*TRD.md
+.env
+.env.*
+!.env.example

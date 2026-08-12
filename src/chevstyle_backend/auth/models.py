@@ -29,3 +29,12 @@ class AuthSyncResponse(BaseModel):
     is_new_user: bool
     created_at: str
     full_name: str | None = None
+
+
+class AuthMeUpdateRequest(BaseModel):
+    full_name: str | None = None
+    notification_prefs: dict[str, bool] | None = None
+
+
+class AuthUpdateResponse(BaseModel):
+    updated: bool

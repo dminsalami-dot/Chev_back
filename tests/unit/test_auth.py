@@ -33,6 +33,24 @@ def test_auth_sync_creates_user() -> None:
     assert body["convex_user_id"] == "convex_user_test"
 
 
+def test_auth_update_me_changes_profile() -> None:
+    headers = {"Authorization": "Bearer test-token"}
+    payload = {
+        "full_name": "Updated User",
+        "notification_prefs": {"generation_complete": False},
+    }
+
+    response = client.patch("/api/v1/auth/me", json=payload, headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"updated": True}
+
+    response = client.get("/api/v1/auth/me", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["full_name"] == "Updated User"
+    assert body["notification_prefs"]["generation_complete"] is False
+
+
 def test_admin_guard_blocks_non_admin() -> None:
     headers = {"Authorization": "Bearer test-token"}
     response = client.get("/api/v1/auth/admin-check", headers=headers)

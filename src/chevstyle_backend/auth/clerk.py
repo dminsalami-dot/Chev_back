@@ -81,6 +81,9 @@ async def verify_clerk_jwt(token: str) -> ClerkUser:
             )
             user.convex_user_id = convex_id
             user.full_name = record.get("full_name")
+            user.profile_image_url = record.get("profile_image_url")
+            user.notification_prefs = record.get(
+                "notification_prefs", user.notification_prefs)
         except Exception:
             pass
 

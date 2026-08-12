@@ -1,9 +1,15 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from chevstyle_backend.auth.clerk import verify_clerk_jwt
-from chevstyle_backend.auth.models import AuthSyncRequest, AuthSyncResponse, ClerkUser
+from chevstyle_backend.auth.models import (
+    AuthMeUpdateRequest,
+    AuthSyncRequest,
+    AuthSyncResponse,
+    AuthUpdateResponse,
+    ClerkUser,
+)
 from chevstyle_backend.convex.client import ConvexClient
 from chevstyle_backend.dependencies import get_current_user, require_admin, require_stylist
 
@@ -36,6 +42,22 @@ async def sync_user(
         created_at=record["created_at"],
         full_name=record.get("full_name"),
     )
+
+
+@router.patch("/me", response_model=AuthUpdateResponse)
+async def update_me(
+    payload: AuthMeUpdateRequest,
+    user: ClerkUser = Depends(get_current_user),
+) -> AuthUpdateResponse:
+    convex = ConvexClient()
+    updated, _ = convex.update_user_profile(
+        clerk_user_id=user.clerk_user_id,
+        full_name=payload.full_name,
+        notification_prefs=payload.notification_prefs,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found")
+    return AuthUpdateResponse(updated=True)
 
 
 @router.get("/admin-check")

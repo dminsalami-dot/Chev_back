@@ -54,3 +54,21 @@ class ConvexClient:
     def get_user_by_clerk_id(self, clerk_user_id: str) -> dict[str, Any] | None:
         with _lock:
             return _store.get(clerk_user_id)
+
+    def update_user_profile(
+        self,
+        clerk_user_id: str,
+        full_name: str | None = None,
+        notification_prefs: dict[str, bool] | None = None,
+    ) -> tuple[bool, dict[str, Any]]:
+        with _lock:
+            existing = _store.get(clerk_user_id)
+            if existing is None:
+                return False, {}
+
+            if full_name is not None:
+                existing["full_name"] = full_name
+            if notification_prefs is not None:
+                existing["notification_prefs"] = notification_prefs
+
+            return True, existing

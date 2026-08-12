@@ -18,7 +18,7 @@ _DEV_TOKENS = {
 }
 
 _JWKS_CACHE: dict[str, Any] = {"keys": None, "fetched_at": 0.0}
-_JWKS_TTL_SECONDS = 300
+_JWKS_TTL_SECONDS = 3000
 
 
 async def _fetch_jwks() -> dict[str, Any]:
@@ -62,8 +62,8 @@ async def verify_clerk_jwt(token: str) -> ClerkUser:
         raise HTTPException(status_code=401, detail="UNAUTHORIZED")
 
     # Fast-path dev tokens when Clerk integration is not configured.
-    if token in _DEV_TOKENS and not (
-        settings.clerk_jwks_url and settings.clerk_issuer and settings.clerk_audience
+    if token in _DEV_TOKENS and (
+        not settings.clerk_jwks_url or settings.app_env in ("development", "test")
     ):
         info = _DEV_TOKENS[token]
         user = ClerkUser(
@@ -89,7 +89,7 @@ async def verify_clerk_jwt(token: str) -> ClerkUser:
 
         return user
 
-    if not (settings.clerk_jwks_url and settings.clerk_issuer and settings.clerk_audience):
+    if not settings.clerk_jwks_url:
         raise HTTPException(
             status_code=401, detail="Clerk authentication is not configured")
 
@@ -97,13 +97,24 @@ async def verify_clerk_jwt(token: str) -> ClerkUser:
     jwk = _find_jwk_for_token(token, jwks)
 
     try:
-        claims = jwt.decode(
-            token,
-            jwk,
-            algorithms=["RS256"],
-            audience=settings.clerk_audience,
-            issuer=settings.clerk_issuer,
-        )
+        options = {
+            "verify_aud": bool(settings.clerk_audience),
+            "verify_iss": bool(settings.clerk_issuer),
+        }
+        
+        decode_args = {
+            "token": token,
+            "key": jwk,
+            "algorithms": ["RS256"],
+            "options": options,
+        }
+        
+        if settings.clerk_audience:
+            decode_args["audience"] = settings.clerk_audience
+        if settings.clerk_issuer:
+            decode_args["issuer"] = settings.clerk_issuer
+
+        claims = jwt.decode(**decode_args)
     except JWTError as exc:
         raise HTTPException(
             status_code=401, detail="Invalid authentication token") from exc

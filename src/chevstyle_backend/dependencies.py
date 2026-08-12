@@ -1,10 +1,19 @@
-from fastapi import Header, Depends, HTTPException
+from typing import Optional
+
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from chevstyle_backend.auth.clerk import verify_clerk_jwt
 from chevstyle_backend.auth.models import ClerkUser
 
+security = HTTPBearer(auto_error=False)
 
-async def get_current_user(authorization: str = Header(...)) -> ClerkUser:
-    token = authorization.removeprefix("Bearer ").strip()
+
+async def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+) -> ClerkUser:
+    if not credentials:
+        raise HTTPException(status_code=401, detail="UNAUTHORIZED")
+    token = credentials.credentials
     return await verify_clerk_jwt(token)
 
 
@@ -18,3 +27,4 @@ async def require_admin(user: ClerkUser = Depends(get_current_user)) -> ClerkUse
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+

@@ -1,5 +1,8 @@
+import logging
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import httpx
 from fastapi import HTTPException
@@ -84,8 +87,8 @@ async def verify_clerk_jwt(token: str) -> ClerkUser:
             user.profile_image_url = record.get("profile_image_url")
             user.notification_prefs = record.get(
                 "notification_prefs", user.notification_prefs)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Convex upsert_user failed (dev token path): %s", exc)
 
         return user
 
@@ -148,7 +151,7 @@ async def verify_clerk_jwt(token: str) -> ClerkUser:
         user.profile_image_url = record.get("profile_image_url")
         user.notification_prefs = record.get(
             "notification_prefs", user.notification_prefs)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Convex upsert_user failed: %s", exc)
 
     return user

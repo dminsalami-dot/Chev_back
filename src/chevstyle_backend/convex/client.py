@@ -7,6 +7,7 @@ from chevstyle_backend.config import settings
 
 # In-memory mock store fallback for testing and development offline.
 _store: dict[str, dict[str, Any]] = {}
+_image_store: dict[str, dict[str, Any]] = {}
 _lock = threading.Lock()
 
 
@@ -23,7 +24,7 @@ class ConvexClient:
     def __init__(self, url: Optional[str] = None, deploy_key: Optional[str] = None):
         self.url = url or settings.convex_url
         self.deploy_key = deploy_key or settings.convex_deploy_key
-        
+
         # We fall back to mock mode if settings.app_env is "test", if running in pytest, or if no real Convex URL is configured
         import sys
         self.is_mock = settings.app_env == "test" or "pytest" in sys.modules or not self.url
@@ -112,3 +113,141 @@ class ConvexClient:
                 },
             )
             return bool(res["updated"]), dict(res["record"])
+
+    def store_image(self, file_bytes: bytes, mime_type: str = "image/jpeg") -> str:
+        """Uploads an image to Convex storage and returns the storage ID."""
+        if self.is_mock:
+            import uuid
+            storage_id = f"storage_{uuid.uuid4().hex[:8]}"
+            return storage_id
+        else:
+            import httpx
+            # 1. Get a short-lived upload URL from our custom Convex mutation.
+            upload_url = self.real_client.mutation(
+                "uploaded_images:generate_upload_url", {}
+            )
+            # 2. POST the raw bytes directly to the returned URL.
+            response = httpx.post(
+                str(upload_url),
+                content=file_bytes,
+                headers={"Content-Type": mime_type},
+            )
+            response.raise_for_status()
+            return response.json()["storageId"]
+
+    def get_storage_url(self, storage_id: str) -> str:
+        """Returns the public serving URL for a Convex storage ID."""
+        if self.is_mock:
+            return f"https://mock.cdn.convex.dev/img/{storage_id}.jpg"
+        else:
+            res = self.real_client.query(
+                "uploaded_images:get_url", {"storage_id": storage_id}
+            )
+            return str(res)
+
+    def create_uploaded_image_record(
+        self,
+        user_id: str,
+        storage_id: str,
+        url: str,
+        face_verified: bool,
+        face_verification_score: float | None,
+        hair_bounding_box: dict | None,
+        hair_segmentation_confidence: float | None,
+        image_metadata: dict,
+        consent_given: bool = True,
+        image_validated: bool = False,
+    ) -> dict[str, Any]:
+        """Creates a record in the uploaded_images collection."""
+        if self.is_mock:
+            import uuid
+            image_id = f"img_{uuid.uuid4().hex[:8]}"
+            record = {
+                "image_id": image_id,
+                "user_id": user_id,
+                "storage_id": storage_id,
+                "url": url,
+                "face_verified": face_verified,
+                "face_verification_score": face_verification_score,
+                "hair_bounding_box": hair_bounding_box,
+                "hair_segmentation_confidence": hair_segmentation_confidence,
+                "image_metadata": image_metadata,
+                "consent_given": consent_given,
+                "image_validated": image_validated,
+                "is_deleted": False,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            with _lock:
+                _image_store[image_id] = record
+            return record
+        else:
+            res = self.real_client.mutation(
+                "uploaded_images:create",
+                {
+                    "user_id": user_id,
+                    "storage_id": storage_id,
+                    "url": url,
+                    "face_verified": face_verified,
+                    "face_verification_score": face_verification_score,
+                    "hair_bounding_box": hair_bounding_box,
+                    "hair_segmentation_confidence": hair_segmentation_confidence,
+                    "image_metadata": image_metadata,
+                    "consent_given": consent_given,
+                    "image_validated": image_validated,
+                },
+            )
+            # Convex returns { id, record } — flatten to a single dict with image_id
+            nested_record = dict(res.get("record") or {})
+            nested_record["image_id"] = str(res.get("id", ""))
+            if "created_at" not in nested_record:
+                nested_record["created_at"] = datetime.now(timezone.utc).isoformat()
+            return nested_record
+
+    def update_image_validated(self, image_id: str, image_validated: bool) -> None:
+        """Update the image_validated flag on an existing uploaded_images record."""
+        if self.is_mock:
+            with _lock:
+                record = _image_store.get(image_id)
+                if record is not None:
+                    record["image_validated"] = image_validated
+        else:
+            self.real_client.mutation(
+                "uploaded_images:update_validated",
+                {
+                    "image_id": image_id,
+                    "image_validated": image_validated,
+                },
+            )
+
+    def delete_image(self, image_id: str, user_id: str) -> dict[str, Any]:
+        """
+        Hard-delete an uploaded image record from Convex using both image_id and
+        user_id for authorization. Prints a terminal message on success.
+
+        In mock mode the record is removed from the in-memory store.
+        In real mode the Convex `uploaded_images:delete_image` mutation is called.
+        """
+        if self.is_mock:
+            with _lock:
+                removed = _image_store.pop(image_id, None)
+            if removed is not None:
+                print(
+                    f"[Convex Mock] Deleted image record: "
+                    f"image_id='{image_id}' user_id='{user_id}'"
+                )
+                return {"deleted": True, "image_id": image_id}
+            else:
+                print(
+                    f"[Convex Mock] Delete attempted but record not found: "
+                    f"image_id='{image_id}' user_id='{user_id}'"
+                )
+                return {"deleted": False, "image_id": image_id}
+        else:
+            res = self.real_client.mutation(
+                "uploaded_images:delete_image",
+                {
+                    "image_id": image_id,
+                    "user_id": user_id,
+                },
+            )
+            return dict(res)

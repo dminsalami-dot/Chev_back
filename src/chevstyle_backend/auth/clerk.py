@@ -125,7 +125,7 @@ async def verify_clerk_jwt(token: str) -> ClerkUser:
     clerk_user_id = claims.get("sub")
     email = claims.get("email") or claims.get("email_address")
     full_name = claims.get("name")
-    role = claims.get("role", "customer")
+    role = claims.get("role") or "customer"
 
     if not clerk_user_id or not email:
         raise HTTPException(

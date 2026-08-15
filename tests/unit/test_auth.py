@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+import pytest
 from fastapi.testclient import TestClient
 
 from chevstyle_backend.app import app
@@ -69,3 +71,44 @@ def test_stylist_guard_allows_stylist() -> None:
     response = client.get("/api/v1/auth/stylist-check", headers=headers)
     assert response.status_code == 200
     assert response.json()["role"] == "stylist"
+
+
+@pytest.mark.anyio
+@patch("chevstyle_backend.auth.clerk._fetch_jwks")
+@patch("chevstyle_backend.auth.clerk._find_jwk_for_token")
+@patch("chevstyle_backend.auth.clerk.jwt.decode")
+@patch("chevstyle_backend.auth.clerk.settings")
+@patch("chevstyle_backend.auth.clerk.ConvexClient")
+async def test_verify_clerk_jwt_role_null(
+    mock_convex_client, mock_settings, mock_decode, mock_find_jwk, mock_fetch_jwks
+) -> None:
+    mock_settings.clerk_jwks_url = "http://mock-jwks"
+    mock_settings.app_env = "production"
+    mock_settings.clerk_audience = None
+    mock_settings.clerk_issuer = None
+
+    mock_decode.return_value = {
+        "sub": "user_123",
+        "email": "user@example.com",
+        "name": "User Name",
+        "role": None,
+    }
+
+    mock_convex = mock_convex_client.return_value
+    mock_convex.upsert_user.return_value = (
+        "convex_123",
+        True,
+        {
+            "created_at": "2026-08-13T14:59:54Z",
+            "full_name": "User Name",
+        },
+    )
+
+    from chevstyle_backend.auth.clerk import verify_clerk_jwt
+    user = await verify_clerk_jwt("some-token")
+
+    assert user.clerk_user_id == "user_123"
+    assert user.email == "user@example.com"
+    assert user.role == "customer"
+    assert user.full_name == "User Name"
+

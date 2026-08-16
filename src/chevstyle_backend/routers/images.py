@@ -91,13 +91,16 @@ async def upload_image(
         logger.error(f"Metadata extraction failed: {str(exc)}")
         raise HTTPException(status_code=415, detail="UNSUPPORTED_FORMAT")
 
-    # 3. Face Verification
-    try:
-        is_verified, score, _ = verify_face(file_bytes)
-        logger.info(f"Face verification: is_verified={is_verified}, score={score:.4f}")
-    except Exception as exc:
-        logger.error(f"Face verification failed: {str(exc)}")
-        raise exc
+    # 3. Face Verification (Gemini — is_human check only)
+    is_human, face_message = verify_face(file_bytes)
+    logger.info(f"Face verification: is_human={is_human} | message='{face_message}'")
+    print(
+        f"[Face Verification] is_human={is_human} | message='{face_message}' "
+        f"| user_id='{user.convex_user_id}' | file='{file.filename}'"
+    )
+
+    if not is_human:
+        raise HTTPException(status_code=422, detail=face_message)
 
     # 4. Hair Segmentation
     try:
@@ -123,14 +126,14 @@ async def upload_image(
         logger.error(f"Convex Storage upload failed: {str(exc)}")
         raise exc
 
-    # 6. Write Record (image_validated=True at this point — already checked above)
+    # 6. Write Record
     try:
         record = convex.create_uploaded_image_record(
             user_id=user.convex_user_id,
             storage_id=storage_id,
             url=url,
-            face_verified=is_verified,
-            face_verification_score=score,
+            face_verified=is_human,
+            face_verification_score=None,
             hair_bounding_box=segmentation_result.bounding_box.model_dump(),
             hair_segmentation_confidence=segmentation_result.confidence,
             image_metadata=metadata.model_dump(),
@@ -162,8 +165,8 @@ async def upload_image(
     return UploadedImageResponse(
         image_id=str(image_id),
         url=url,
-        face_verified=is_verified,
-        face_verification_score=score,
+        face_verified=is_human,
+        face_verification_score=None,
         hair_bounding_box=segmentation_result.bounding_box,
         hair_segmentation_confidence=segmentation_result.confidence,
         image_metadata=metadata,

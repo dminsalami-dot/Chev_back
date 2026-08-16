@@ -2,5 +2,6 @@ TRD.md
 .env
 .env.*
 !.env.example
+
 __pycache__/
 *.py[cod]

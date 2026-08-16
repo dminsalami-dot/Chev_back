@@ -1,94 +1,126 @@
-import cv2
-import numpy as np
-import json
+
 import base64
+import json
 from google import genai
-from google.genai import types
-from fastapi import HTTPException
 from chevstyle_backend.config import settings
 
-CASCADE_PATH = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-face_cascade = cv2.CascadeClassifier(CASCADE_PATH)
 
-def detect_faces_opencv(image_bytes: bytes) -> dict:
-    np_arr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-    if img is None:
-        return {"detected": False, "face_count": 0, "confidence": 0.0, "faces": []}
+PROMPT = """You are an image validation system for a hairstyle virtual try-on application.
 
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80))
-    
-    return {
-        "detected": len(faces) > 0,
-        "face_count": len(faces),
-        "confidence": 1.0 if len(faces) > 0 else 0.0,
-        "faces": [{"x": int(x), "y": int(y), "width": int(w), "height": int(h)} for (x, y, w, h) in faces]
-    }
+Analyze the provided image and determine whether it contains **exactly one visible human face**.
 
-def verify_face_gemini(image_bytes: bytes) -> dict:
-    client = genai.Client(api_key=settings.gemini_api_key)
+### Validation Rules
 
-    prompt = """
-You are an image analysis assistant.
-Analyze the provided image and answer ONLY in JSON:
+Return `true` ONLY when:
+
+* The image contains exactly **one** human face.
+* The face belongs to a real human.
+* The face is sufficiently visible to identify it as a human face.
+
+Return `false` when:
+
+* There are **zero human faces**.
+* There are **two or more human faces**.
+* The image contains only part of a face that is too obscured to confidently identify.
+* The image contains a cartoon, drawing, painting, sculpture, mannequin, doll, or other non-human representation of a face.
+* The image is otherwise unsuitable for a hairstyle virtual try-on.
+
+### Required Response
+
+Return ONLY valid JSON in exactly this format:
 
 {
-  "has_human_face": true,
-  "face_clearly_visible": true,
-  "lighting_adequate": true,
-  "face_obstructed": false,
-  "image_quality_score": 0.0,
-  "issues": []
+  "valid": true,
+  "message": "Exactly one human face is clearly visible."
 }
 
-Be factual and concise. Do not add any commentary outside the JSON object.
-"""
+The `valid` field must be a boolean: `true` or `false`.
 
+The `message` must be exactly **one concise sentence** explaining why the image was accepted or rejected.
+
+Do not include any additional fields, markdown, or commentary.
+
+### Examples
+
+One human face:
+{
+  "valid": true,
+  "message": "Exactly one human face is clearly visible."
+}
+
+No face:
+{
+  "valid": false,
+  "message": "No human face is visible in the image."
+}
+
+Multiple faces:
+{
+  "valid": false,
+  "message": "The image contains more than one human face."
+}
+
+Non-human face:
+{
+  "valid": false,
+  "message": "The image contains a non-human representation rather than a real human face."
+}"""
+
+
+
+def verify_face(image_bytes: bytes) -> tuple[bool, str]:
+    """
+    Sends the image to Gemini and determines whether it contains exactly one
+    real human face suitable for a hairstyle virtual try-on.
+
+    Returns:
+        (is_human: bool, message: str)
+
+    Never raises — returns (False, error_message) on any unexpected failure.
+    """
     try:
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                types.Part.from_text(text=prompt),
+        client = genai.Client(api_key=settings.gemini_api_key)
+
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        interaction = client.interactions.create(
+            model="gemini-3.6-flash",
+            input=[
+                {
+                    "type": "image",
+                    "data": image_b64,
+                    "mime_type": "image/jpeg",
+                },
+                {
+                    "type": "text",
+                    "text": PROMPT,
+                },
             ],
         )
 
-        content = response.text.strip()
+        content = interaction.output_text.strip()
+
+        # Strip optional markdown code fences
         if content.startswith("```json"):
-            content = content[7:].rstrip("```").strip()
+            content = content[7:].rstrip("`").strip()
         elif content.startswith("```"):
-            content = content[3:].rstrip("```").strip()
+            content = content[3:].rstrip("`").strip()
 
-        return json.loads(content)
-    except Exception as e:
-        return {
-            "has_human_face": False,
-            "face_clearly_visible": False,
-            "lighting_adequate": False,
-            "face_obstructed": False,
-            "image_quality_score": 0.0,
-            "issues": [f"Gemini call failed: {str(e)}"],
-        }
+        result = json.loads(content)
 
-def verify_face(image_bytes: bytes) -> tuple[bool, float, dict]:
-    """
-    Returns (is_verified, score, metadata)
-    Raises HTTPException for multiple faces or no face.
-    """
-    opencv_result = detect_faces_opencv(image_bytes)
-    
-    if opencv_result["detected"] and opencv_result["face_count"] == 1:
-        return True, opencv_result["confidence"], opencv_result
-        
-    elif opencv_result["face_count"] > 1:
-        raise HTTPException(status_code=422, detail="MULTIPLE_FACES")
-        
-    else:
-        # Fallback to Gemini
-        gemini_result = verify_face_gemini(image_bytes)
-        if gemini_result.get("has_human_face") and gemini_result.get("face_clearly_visible"):
-            score = float(gemini_result.get("image_quality_score", 0.8))
-            return True, score, gemini_result
-        else:
-            raise HTTPException(status_code=422, detail="FACE_NOT_DETECTED")
+        is_human: bool = bool(result.get("valid", False))
+        message: str = result.get(
+            "message",
+            "No message returned."
+        )
+
+        print(
+            f"[Face Verification] is_human={is_human} | message='{message}'"
+        )
+
+        return is_human, message
+
+    except Exception as exc:
+        error_msg = f"Gemini face verification failed: {str(exc)}"
+        print(f"[Face Verification] ERROR | {error_msg}")
+        return False, error_msg

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Gemini / AI
     gemini_api_key: str | None = Field(default=None, alias="GEMINI_API_KEY")
 
+    # Moondream
+    moondream_api_key: str | None = Field(default=None, alias="MOONDREAM_API_KEY")
+
     # Clerk JWT validation
     clerk_issuer: str | None = Field(default=None, alias="CLERK_ISSUER")
     clerk_audience: str | None = Field(default=None, alias="CLERK_AUDIENCE")

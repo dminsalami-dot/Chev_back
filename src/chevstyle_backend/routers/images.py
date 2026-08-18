@@ -106,8 +106,8 @@ async def upload_image(
     try:
         segmentation_result = segment_hair(file_bytes)
         logger.info(
-            f"Hair segmentation: confidence={segmentation_result.confidence:.4f}, "
-            f"bounding_box={segmentation_result.bounding_box.model_dump()}"
+            f"Hair segmentation: "
+            f"bounding_box={segmentation_result.bbox.model_dump()}"
         )
     except Exception as exc:
         logger.error(f"Hair segmentation failed: {str(exc)}")
@@ -134,8 +134,8 @@ async def upload_image(
             url=url,
             face_verified=is_human,
             face_verification_score=None,
-            hair_bounding_box=segmentation_result.bounding_box.model_dump(),
-            hair_segmentation_confidence=segmentation_result.confidence,
+            hair_bounding_box=segmentation_result.bbox.model_dump(),
+            hair_segmentation_confidence=None,
             image_metadata=metadata.model_dump(),
             consent_given=True,
             image_validated=True,
@@ -167,8 +167,8 @@ async def upload_image(
         url=url,
         face_verified=is_human,
         face_verification_score=None,
-        hair_bounding_box=segmentation_result.bounding_box,
-        hair_segmentation_confidence=segmentation_result.confidence,
+        hair_bounding_box=segmentation_result.bbox,
+        hair_segmentation_path=segmentation_result.path,
         image_metadata=metadata,
         created_at=created_at,
     )

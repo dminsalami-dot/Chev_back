@@ -4,16 +4,15 @@ from typing import Optional
 
 
 class BoundingBox(BaseModel):
-    x: int
-    y: int
-    width: int
-    height: int
+    x_min: float
+    y_min: float
+    x_max: float
+    y_max: float
 
 
 class HairSegmentationResult(BaseModel):
-    bounding_box: BoundingBox
-    confidence: float
-    mask_image_url: Optional[str] = None
+    path: str
+    bbox: BoundingBox
 
 
 class ImageMetadata(BaseModel):
@@ -30,6 +29,6 @@ class UploadedImageResponse(BaseModel):
     face_verified: bool
     face_verification_score: Optional[float] = None
     hair_bounding_box: Optional[BoundingBox] = None
-    hair_segmentation_confidence: Optional[float] = None
+    hair_segmentation_path: Optional[str] = None
     image_metadata: ImageMetadata
     created_at: datetime

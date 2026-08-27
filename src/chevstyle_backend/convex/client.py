@@ -251,3 +251,29 @@ class ConvexClient:
                 },
             )
             return dict(res)
+
+    # ------------------------------------------------------------------ #
+    #  Hairstyle catalog                                                  #
+    # ------------------------------------------------------------------ #
+
+    def list_hairstyles(self, gender: str | None = None) -> list[dict[str, Any]]:
+        """Return all hairstyles, optionally filtered by gender."""
+        if self.is_mock:
+            # Return empty list in mock/test mode
+            return []
+        else:
+            args: dict[str, Any] = {}
+            if gender:
+                args["gender"] = gender
+            results = self.real_client.query("hairstyles:list", args)
+            return [dict(r) for r in results]
+
+    def get_hairstyle_by_id(self, hairstyle_id: str) -> dict[str, Any] | None:
+        """Return a single hairstyle by its Convex document ID."""
+        if self.is_mock:
+            return None
+        else:
+            res = self.real_client.query(
+                "hairstyles:getById", {"id": hairstyle_id}
+            )
+            return dict(res) if res else None

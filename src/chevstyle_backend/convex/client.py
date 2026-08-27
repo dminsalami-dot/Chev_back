@@ -8,6 +8,7 @@ from chevstyle_backend.config import settings
 # In-memory mock store fallback for testing and development offline.
 _store: dict[str, dict[str, Any]] = {}
 _image_store: dict[str, dict[str, Any]] = {}
+_hairstyle_store: dict[str, dict[str, Any]] = {}
 _lock = threading.Lock()
 
 
@@ -256,11 +257,56 @@ class ConvexClient:
     #  Hairstyle catalog                                                  #
     # ------------------------------------------------------------------ #
 
+    def create_hairstyle(
+        self,
+        name: str,
+        gender: str,
+        categories: list[str],
+        image_url: str,
+        picture_hash: str,
+        description: str,
+        maintenance_level: str,
+        stylist_specs: str,
+        hashtags: list[str],
+        likes_count: str = "0",
+        is_trending: bool = False,
+    ) -> dict[str, Any]:
+        """Creates a hairstyle record in Convex."""
+        payload = {
+            "name": name,
+            "gender": gender,
+            "categories": categories,
+            "imageUrl": image_url,
+            "pictureHash": picture_hash,
+            "description": description,
+            "maintenanceLevel": maintenance_level,
+            "stylistSpecs": stylist_specs,
+            "hashtags": hashtags,
+            "likesCount": likes_count,
+            "isTrending": is_trending,
+        }
+        if self.is_mock:
+            import uuid
+            doc_id = f"style_{uuid.uuid4().hex[:8]}"
+            record = dict(payload)
+            record["_id"] = doc_id
+            with _lock:
+                _hairstyle_store[doc_id] = record
+            return record
+        else:
+            res = self.real_client.mutation("hairstyles:create", payload)
+            if isinstance(res, dict):
+                return dict(res)
+            return {"_id": str(res), **payload}
+
     def list_hairstyles(self, gender: str | None = None) -> list[dict[str, Any]]:
         """Return all hairstyles, optionally filtered by gender."""
         if self.is_mock:
-            # Return empty list in mock/test mode
-            return []
+            with _lock:
+                items = list(_hairstyle_store.values())
+            if gender:
+                items = [h for h in items if h.get("gender") == gender or h.get("gender") == "unisex"]
+            return items
         else:
             args: dict[str, Any] = {}
             if gender:
@@ -271,7 +317,8 @@ class ConvexClient:
     def get_hairstyle_by_id(self, hairstyle_id: str) -> dict[str, Any] | None:
         """Return a single hairstyle by its Convex document ID."""
         if self.is_mock:
-            return None
+            with _lock:
+                return _hairstyle_store.get(hairstyle_id)
         else:
             res = self.real_client.query(
                 "hairstyles:getById", {"id": hairstyle_id}

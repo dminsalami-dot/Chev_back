@@ -85,6 +85,9 @@ async def verify_clerk_jwt(token: str) -> ClerkUser:
             user.convex_user_id = convex_id
             user.full_name = record.get("full_name")
             user.profile_image_url = record.get("profile_image_url")
+            user.gender = record.get("gender")
+            user.style_preferences = record.get("style_preferences", user.style_preferences)
+            user.has_completed_onboarding = record.get("has_completed_onboarding", user.has_completed_onboarding)
             user.notification_prefs = record.get(
                 "notification_prefs", user.notification_prefs)
         except Exception as exc:

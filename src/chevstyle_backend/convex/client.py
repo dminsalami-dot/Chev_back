@@ -42,6 +42,8 @@ class ConvexClient:
         email: str,
         role: str,
         full_name: str | None = None,
+        gender: str | None = None,
+        style_preferences: list[str] | None = None,
     ) -> tuple[str, bool, dict[str, Any]]:
         """Create or update a user record and return a Convex user id."""
         if self.is_mock:
@@ -53,6 +55,9 @@ class ConvexClient:
                         "role": role,
                         "full_name": full_name,
                         "profile_image_url": None,
+                        "gender": gender,
+                        "style_preferences": style_preferences or [],
+                        "has_completed_onboarding": bool(gender),
                         "notification_prefs": _default_notification_prefs(),
                         "created_at": datetime.now(timezone.utc).isoformat(),
                     }
@@ -60,20 +65,27 @@ class ConvexClient:
                     existing = _store[clerk_user_id]
                     existing["email"] = email
                     existing["role"] = role
-                    existing["full_name"] = full_name or existing.get("full_name")
+                    if full_name is not None:
+                        existing["full_name"] = full_name
+                    if gender is not None:
+                        existing["gender"] = gender
+                        existing["has_completed_onboarding"] = True
+                    if style_preferences is not None:
+                        existing["style_preferences"] = style_preferences
 
                 return f"convex_{clerk_user_id}", is_new, _store[clerk_user_id]
         else:
-            res = self.real_client.mutation(
-                "users:upsert_user",
-                {
-                    "clerk_user_id": clerk_user_id,
-                    "email": email,
-                    "role": role,
-                    "full_name": full_name,
-                },
-            )
-            # Convex ID (_id) is returned as a string, e.g. "j97...".
+            payload: dict[str, Any] = {
+                "clerk_user_id": clerk_user_id,
+                "email": email,
+                "role": role,
+                "full_name": full_name,
+            }
+            if gender is not None:
+                payload["gender"] = gender
+            if style_preferences is not None:
+                payload["stylePreferences"] = style_preferences
+            res = self.real_client.mutation("users:upsert_user", payload)
             return str(res["id"]), bool(res["is_new"]), dict(res["record"])
 
     def get_user_by_clerk_id(self, clerk_user_id: str) -> dict[str, Any] | None:
@@ -92,6 +104,9 @@ class ConvexClient:
         clerk_user_id: str,
         full_name: str | None = None,
         notification_prefs: dict[str, bool] | None = None,
+        gender: str | None = None,
+        style_preferences: list[str] | None = None,
+        has_completed_onboarding: bool | None = None,
     ) -> tuple[bool, dict[str, Any]]:
         if self.is_mock:
             with _lock:
@@ -103,16 +118,31 @@ class ConvexClient:
                     existing["full_name"] = full_name
                 if notification_prefs is not None:
                     existing["notification_prefs"] = notification_prefs
+                if gender is not None:
+                    existing["gender"] = gender
+                if style_preferences is not None:
+                    existing["style_preferences"] = style_preferences
+                if has_completed_onboarding is not None:
+                    existing["has_completed_onboarding"] = has_completed_onboarding
+                elif gender is not None:
+                    existing["has_completed_onboarding"] = True
 
                 return True, existing
         else:
+            payload: dict[str, Any] = {
+                "clerk_user_id": clerk_user_id,
+                "full_name": full_name,
+                "notification_prefs": notification_prefs,
+            }
+            if gender is not None:
+                payload["gender"] = gender
+            if style_preferences is not None:
+                payload["stylePreferences"] = style_preferences
+            if has_completed_onboarding is not None:
+                payload["hasCompletedOnboarding"] = has_completed_onboarding
             res = self.real_client.mutation(
                 "users:update_user_profile",
-                {
-                    "clerk_user_id": clerk_user_id,
-                    "full_name": full_name,
-                    "notification_prefs": notification_prefs,
-                },
+                payload,
             )
             return bool(res["updated"]), dict(res["record"])
 

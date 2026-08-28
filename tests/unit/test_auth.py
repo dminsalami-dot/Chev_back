@@ -176,6 +176,38 @@ def test_convex_client_update_user_profile_payload_excludes_none() -> None:
     )
 
 
+def test_convex_client_upsert_user_includes_full_name() -> None:
+    from unittest.mock import MagicMock
+    from chevstyle_backend.convex.client import ConvexClient
+
+    client = ConvexClient(url="https://fake-convex.cloud")
+    client.is_mock = False
+    client.real_client = MagicMock()
+    client.real_client.mutation.return_value = {
+        "id": "convex_123",
+        "is_new": True,
+        "record": {"clerk_user_id": "user_123", "email": "test@example.com", "role": "customer", "full_name": None},
+    }
+
+    client.upsert_user(
+        clerk_user_id="user_123",
+        email="test@example.com",
+        role="customer",
+        full_name=None,
+    )
+
+    client.real_client.mutation.assert_called_once_with(
+        "users:upsert_user",
+        {
+            "clerk_user_id": "user_123",
+            "email": "test@example.com",
+            "role": "customer",
+            "full_name": None,
+        },
+    )
+
+
+
 
 def test_auth_patch_partial_preserves_existing_fields() -> None:
     headers = {"Authorization": "Bearer test-token"}

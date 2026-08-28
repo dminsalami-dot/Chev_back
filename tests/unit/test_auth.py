@@ -171,7 +171,7 @@ def test_convex_client_update_user_profile_payload_excludes_none() -> None:
         {
             "clerk_user_id": "test_user",
             "gender": "men",
-            "stylePreferences": ["fade"],
+            "style_preferences": ["fade"],
         },
     )
 

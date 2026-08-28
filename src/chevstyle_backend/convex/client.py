@@ -87,9 +87,8 @@ class ConvexClient:
                 "clerk_user_id": clerk_user_id,
                 "email": email,
                 "role": role,
+                "full_name": full_name,
             }
-            if full_name is not None:
-                payload["full_name"] = full_name
             if gender is not None:
                 payload["gender"] = gender
             if style_preferences is not None:

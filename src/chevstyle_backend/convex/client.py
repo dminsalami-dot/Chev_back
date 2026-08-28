@@ -9,6 +9,7 @@ from chevstyle_backend.config import settings
 _store: dict[str, dict[str, Any]] = {}
 _image_store: dict[str, dict[str, Any]] = {}
 _hairstyle_store: dict[str, dict[str, Any]] = {}
+_saved_styles_store: dict[str, dict[str, Any]] = {}
 _lock = threading.Lock()
 
 
@@ -324,3 +325,91 @@ class ConvexClient:
                 "hairstyles:getById", {"id": hairstyle_id}
             )
             return dict(res) if res else None
+
+    # ------------------------------------------------------------------ #
+    #  Saved styles                                                       #
+    # ------------------------------------------------------------------ #
+
+    def list_saved_styles(self, user_id: str) -> list[dict[str, Any]]:
+        """Return all saved styles for a specific user ID."""
+        if self.is_mock:
+            with _lock:
+                items = [
+                    dict(h)
+                    for h in _saved_styles_store.values()
+                    if h.get("userId") == user_id
+                ]
+            # order desc by savedAt
+            items.sort(key=lambda x: x.get("savedAt", 0), reverse=True)
+            return items
+        else:
+            results = self.real_client.query(
+                "saved_styles:listSavedStyles", {"userId": user_id}
+            )
+            return [dict(r) for r in results]
+
+    def toggle_saved_style(
+        self,
+        user_id: str,
+        hairstyle_id: str,
+        hairstyle_name: str,
+        image_url: str,
+        preview_id: str | None = None,
+        preview_image_url: str | None = None,
+    ) -> dict[str, Any]:
+        """Toggles a hairstyle in the user's saved styles list."""
+        if self.is_mock:
+            import uuid
+            with _lock:
+                existing = None
+                for style_id, value in _saved_styles_store.items():
+                    if (
+                        value.get("userId") == user_id
+                        and value.get("hairstyleId") == hairstyle_id
+                    ):
+                        existing = value
+                        break
+
+                if existing:
+                    existing_id = existing["_id"]
+                    _saved_styles_store.pop(existing_id)
+                    return {"isSaved": False, "id": existing_id}
+                else:
+                    new_id = f"saved_{uuid.uuid4().hex[:8]}"
+                    record = {
+                        "_id": new_id,
+                        "userId": user_id,
+                        "hairstyleId": hairstyle_id,
+                        "hairstyleName": hairstyle_name,
+                        "imageUrl": image_url,
+                        "previewId": preview_id,
+                        "previewImageUrl": preview_image_url,
+                        "savedAt": int(datetime.now(timezone.utc).timestamp() * 1000),
+                    }
+                    _saved_styles_store[new_id] = record
+                    return {"isSaved": True, "id": new_id}
+        else:
+            res = self.real_client.mutation(
+                "saved_styles:toggleSavedStyle",
+                {
+                    "userId": user_id,
+                    "hairstyleId": hairstyle_id,
+                    "hairstyleName": hairstyle_name,
+                    "imageUrl": image_url,
+                    "previewId": preview_id,
+                    "previewImageUrl": preview_image_url,
+                },
+            )
+            return dict(res)
+
+    def remove_saved_style(self, id: str) -> dict[str, Any]:
+        """Remove a saved style by its document ID."""
+        if self.is_mock:
+            with _lock:
+                _saved_styles_store.pop(id, None)
+            return {"success": True}
+        else:
+            res = self.real_client.mutation(
+                "saved_styles:removeSavedStyle", {"id": id}
+            )
+            return dict(res)

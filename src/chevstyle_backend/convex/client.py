@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger("chevstyle_backend.convex.client")
 import threading
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -46,6 +49,10 @@ class ConvexClient:
         style_preferences: list[str] | None = None,
     ) -> tuple[str, bool, dict[str, Any]]:
         """Create or update a user record and return a Convex user id."""
+        logger.info(
+            f"[ConvexClient.upsert_user] clerk_user_id='{clerk_user_id}', email='{email}', "
+            f"role='{role}', gender='{gender}', style_preferences={style_preferences}"
+        )
         if self.is_mock:
             with _lock:
                 is_new = clerk_user_id not in _store
@@ -73,19 +80,23 @@ class ConvexClient:
                     if style_preferences is not None:
                         existing["style_preferences"] = style_preferences
 
+                logger.debug(f"[Convex Mock] Upserted user record: {_store[clerk_user_id]}")
                 return f"convex_{clerk_user_id}", is_new, _store[clerk_user_id]
         else:
             payload: dict[str, Any] = {
                 "clerk_user_id": clerk_user_id,
                 "email": email,
                 "role": role,
-                "full_name": full_name,
             }
+            if full_name is not None:
+                payload["full_name"] = full_name
             if gender is not None:
                 payload["gender"] = gender
             if style_preferences is not None:
                 payload["stylePreferences"] = style_preferences
+            logger.info(f"[Convex Real] Calling users:upsert_user with payload={payload}")
             res = self.real_client.mutation("users:upsert_user", payload)
+            logger.info(f"[Convex Real] Upsert response id={res.get('id')}, is_new={res.get('is_new')}")
             return str(res["id"]), bool(res["is_new"]), dict(res["record"])
 
     def get_user_by_clerk_id(self, clerk_user_id: str) -> dict[str, Any] | None:
@@ -108,10 +119,17 @@ class ConvexClient:
         style_preferences: list[str] | None = None,
         has_completed_onboarding: bool | None = None,
     ) -> tuple[bool, dict[str, Any]]:
+        logger.info(
+            f"[ConvexClient.update_user_profile] clerk_user_id='{clerk_user_id}' | "
+            f"updates={{'full_name': '{full_name}', 'gender': '{gender}', "
+            f"'style_preferences': {style_preferences}, 'has_completed_onboarding': {has_completed_onboarding}, "
+            f"'notification_prefs': {notification_prefs}}}"
+        )
         if self.is_mock:
             with _lock:
                 existing = _store.get(clerk_user_id)
                 if existing is None:
+                    logger.warning(f"[Convex Mock] User not found for update: clerk_user_id='{clerk_user_id}'")
                     return False, {}
 
                 if full_name is not None:
@@ -127,8 +145,10 @@ class ConvexClient:
                 elif gender is not None:
                     existing["has_completed_onboarding"] = True
 
+                logger.debug(f"[Convex Mock] Updated user record: {existing}")
                 return True, existing
         else:
+            # Build strictly partial dictionary excluding any None values
             payload: dict[str, Any] = {
                 "clerk_user_id": clerk_user_id,
             }
@@ -142,10 +162,13 @@ class ConvexClient:
                 payload["stylePreferences"] = style_preferences
             if has_completed_onboarding is not None:
                 payload["hasCompletedOnboarding"] = has_completed_onboarding
+            
+            logger.info(f"[Convex Real] Calling users:update_user_profile with payload={payload}")
             res = self.real_client.mutation(
                 "users:update_user_profile",
                 payload,
             )
+            logger.info(f"[Convex Real] Update response: {res}")
             return bool(res["updated"]), dict(res["record"])
 
     def store_image(self, file_bytes: bytes, mime_type: str = "image/jpeg") -> str:

@@ -36,6 +36,8 @@ async def sync_user(
             email=user.email,
             role=payload.role,
             full_name=payload.full_name or user.full_name,
+            gender=payload.gender,
+            style_preferences=payload.style_preferences,
         )
         logger.info(
             f"Successfully synced user - clerk_user_id='{user.clerk_user_id}' -> "
@@ -53,6 +55,9 @@ async def sync_user(
         is_new_user=is_new_user,
         created_at=record["created_at"],
         full_name=record.get("full_name"),
+        gender=record.get("gender"),
+        style_preferences=record.get("style_preferences", []),
+        has_completed_onboarding=record.get("has_completed_onboarding", False),
     )
 
 
@@ -67,6 +72,9 @@ async def update_me(
             clerk_user_id=user.clerk_user_id,
             full_name=payload.full_name,
             notification_prefs=payload.notification_prefs,
+            gender=payload.gender,
+            style_preferences=payload.style_preferences,
+            has_completed_onboarding=payload.has_completed_onboarding,
         )
         if not updated:
             logger.warning(f"Profile update failed: user not found for clerk_user_id='{user.clerk_user_id}'")

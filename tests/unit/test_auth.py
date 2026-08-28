@@ -112,3 +112,40 @@ async def test_verify_clerk_jwt_role_null(
     assert user.role == "customer"
     assert user.full_name == "User Name"
 
+
+
+def test_auth_sync_with_gender_and_preferences() -> None:
+    headers = {"Authorization": "Bearer test-token"}
+    payload = {
+        "full_name": "Style User",
+        "role": "customer",
+        "gender": "men",
+        "style_preferences": ["fade", "short"],
+    }
+
+    response = client.post("/api/v1/auth/sync", json=payload, headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gender"] == "men"
+    assert body["style_preferences"] == ["fade", "short"]
+    assert body["has_completed_onboarding"] is True
+
+
+def test_auth_update_me_style_profile() -> None:
+    headers = {"Authorization": "Bearer test-token"}
+    payload = {
+        "gender": "women",
+        "style_preferences": ["bob", "layers"],
+        "has_completed_onboarding": True,
+    }
+
+    response = client.patch("/api/v1/auth/me", json=payload, headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"updated": True}
+
+    response = client.get("/api/v1/auth/me", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["gender"] == "women"
+    assert body["style_preferences"] == ["bob", "layers"]
+    assert body["has_completed_onboarding"] is True

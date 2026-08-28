@@ -91,6 +91,7 @@ class ConvexClient:
             }
             if gender is not None:
                 payload["gender"] = gender
+                payload["has_completed_onboarding"] = True
             if style_preferences is not None:
                 payload["style_preferences"] = style_preferences
             logger.info(f"[Convex Real] Calling users:upsert_user with payload={payload}")
@@ -157,10 +158,13 @@ class ConvexClient:
                 payload["notification_prefs"] = notification_prefs
             if gender is not None:
                 payload["gender"] = gender
+                payload["has_completed_onboarding"] = True
             if style_preferences is not None:
                 payload["style_preferences"] = style_preferences
             if has_completed_onboarding is not None:
                 payload["has_completed_onboarding"] = has_completed_onboarding
+            elif gender is not None:
+                payload["has_completed_onboarding"] = True
             
             logger.info(f"[Convex Real] Calling users:update_user_profile with payload={payload}")
             res = self.real_client.mutation(

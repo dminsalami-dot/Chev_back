@@ -149,3 +149,29 @@ def test_auth_update_me_style_profile() -> None:
     assert body["gender"] == "women"
     assert body["style_preferences"] == ["bob", "layers"]
     assert body["has_completed_onboarding"] is True
+
+
+def test_convex_client_update_user_profile_payload_excludes_none() -> None:
+    from unittest.mock import MagicMock
+    from chevstyle_backend.convex.client import ConvexClient
+
+    client = ConvexClient(url="https://fake-convex.cloud")
+    client.is_mock = False
+    client.real_client = MagicMock()
+    client.real_client.mutation.return_value = {"updated": True, "record": {"clerk_user_id": "test_user"}}
+
+    client.update_user_profile(
+        clerk_user_id="test_user",
+        gender="men",
+        style_preferences=["fade"],
+    )
+
+    client.real_client.mutation.assert_called_once_with(
+        "users:update_user_profile",
+        {
+            "clerk_user_id": "test_user",
+            "gender": "men",
+            "stylePreferences": ["fade"],
+        },
+    )
+

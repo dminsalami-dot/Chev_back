@@ -175,3 +175,33 @@ def test_convex_client_update_user_profile_payload_excludes_none() -> None:
         },
     )
 
+
+
+def test_auth_patch_partial_preserves_existing_fields() -> None:
+    headers = {"Authorization": "Bearer test-token"}
+    # 1. Sync full profile initially
+    sync_payload = {
+        "full_name": "Original Name",
+        "role": "customer",
+        "gender": "men",
+        "style_preferences": ["fade"],
+    }
+    sync_res = client.post("/api/v1/auth/sync", json=sync_payload, headers=headers)
+    assert sync_res.status_code == 200
+
+    # 2. Patch only style preferences (no full_name, no notification_prefs)
+    patch_payload = {
+        "style_preferences": ["fade", "buzz"],
+    }
+    patch_res = client.patch("/api/v1/auth/me", json=patch_payload, headers=headers)
+    assert patch_res.status_code == 200
+
+    # 3. Verify full_name and gender are completely preserved and NOT unset
+    me_res = client.get("/api/v1/auth/me", headers=headers)
+    assert me_res.status_code == 200
+    me_body = me_res.json()
+    assert me_body["full_name"] == "Original Name"
+    assert me_body["gender"] == "men"
+    assert me_body["style_preferences"] == ["fade", "buzz"]
+    # notification_prefs was not modified by patch (remains what was previously set)
+    assert me_body["notification_prefs"] == {"generation_complete": False}

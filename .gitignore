@@ -5,3 +5,6 @@ TRD.md
 
 __pycache__/
 *.py[cod]
+src/chevstyle_backend/women/*
+
+

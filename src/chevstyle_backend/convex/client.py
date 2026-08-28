@@ -8,6 +8,8 @@ from chevstyle_backend.config import settings
 # In-memory mock store fallback for testing and development offline.
 _store: dict[str, dict[str, Any]] = {}
 _image_store: dict[str, dict[str, Any]] = {}
+_hairstyle_store: dict[str, dict[str, Any]] = {}
+_saved_styles_store: dict[str, dict[str, Any]] = {}
 _lock = threading.Lock()
 
 
@@ -256,11 +258,56 @@ class ConvexClient:
     #  Hairstyle catalog                                                  #
     # ------------------------------------------------------------------ #
 
+    def create_hairstyle(
+        self,
+        name: str,
+        gender: str,
+        categories: list[str],
+        image_url: str,
+        picture_hash: str,
+        description: str,
+        maintenance_level: str,
+        stylist_specs: str,
+        hashtags: list[str],
+        likes_count: str = "0",
+        is_trending: bool = False,
+    ) -> dict[str, Any]:
+        """Creates a hairstyle record in Convex."""
+        payload = {
+            "name": name,
+            "gender": gender,
+            "categories": categories,
+            "imageUrl": image_url,
+            "pictureHash": picture_hash,
+            "description": description,
+            "maintenanceLevel": maintenance_level,
+            "stylistSpecs": stylist_specs,
+            "hashtags": hashtags,
+            "likesCount": likes_count,
+            "isTrending": is_trending,
+        }
+        if self.is_mock:
+            import uuid
+            doc_id = f"style_{uuid.uuid4().hex[:8]}"
+            record = dict(payload)
+            record["_id"] = doc_id
+            with _lock:
+                _hairstyle_store[doc_id] = record
+            return record
+        else:
+            res = self.real_client.mutation("hairstyles:create", payload)
+            if isinstance(res, dict):
+                return dict(res)
+            return {"_id": str(res), **payload}
+
     def list_hairstyles(self, gender: str | None = None) -> list[dict[str, Any]]:
         """Return all hairstyles, optionally filtered by gender."""
         if self.is_mock:
-            # Return empty list in mock/test mode
-            return []
+            with _lock:
+                items = list(_hairstyle_store.values())
+            if gender:
+                items = [h for h in items if h.get("gender") == gender or h.get("gender") == "unisex"]
+            return items
         else:
             args: dict[str, Any] = {}
             if gender:
@@ -271,9 +318,98 @@ class ConvexClient:
     def get_hairstyle_by_id(self, hairstyle_id: str) -> dict[str, Any] | None:
         """Return a single hairstyle by its Convex document ID."""
         if self.is_mock:
-            return None
+            with _lock:
+                return _hairstyle_store.get(hairstyle_id)
         else:
             res = self.real_client.query(
                 "hairstyles:getById", {"id": hairstyle_id}
             )
             return dict(res) if res else None
+
+    # ------------------------------------------------------------------ #
+    #  Saved styles                                                       #
+    # ------------------------------------------------------------------ #
+
+    def list_saved_styles(self, user_id: str) -> list[dict[str, Any]]:
+        """Return all saved styles for a specific user ID."""
+        if self.is_mock:
+            with _lock:
+                items = [
+                    dict(h)
+                    for h in _saved_styles_store.values()
+                    if h.get("userId") == user_id
+                ]
+            # order desc by savedAt
+            items.sort(key=lambda x: x.get("savedAt", 0), reverse=True)
+            return items
+        else:
+            results = self.real_client.query(
+                "saved_styles:listSavedStyles", {"userId": user_id}
+            )
+            return [dict(r) for r in results]
+
+    def toggle_saved_style(
+        self,
+        user_id: str,
+        hairstyle_id: str,
+        hairstyle_name: str,
+        image_url: str,
+        preview_id: str | None = None,
+        preview_image_url: str | None = None,
+    ) -> dict[str, Any]:
+        """Toggles a hairstyle in the user's saved styles list."""
+        if self.is_mock:
+            import uuid
+            with _lock:
+                existing = None
+                for style_id, value in _saved_styles_store.items():
+                    if (
+                        value.get("userId") == user_id
+                        and value.get("hairstyleId") == hairstyle_id
+                    ):
+                        existing = value
+                        break
+
+                if existing:
+                    existing_id = existing["_id"]
+                    _saved_styles_store.pop(existing_id)
+                    return {"isSaved": False, "id": existing_id}
+                else:
+                    new_id = f"saved_{uuid.uuid4().hex[:8]}"
+                    record = {
+                        "_id": new_id,
+                        "userId": user_id,
+                        "hairstyleId": hairstyle_id,
+                        "hairstyleName": hairstyle_name,
+                        "imageUrl": image_url,
+                        "previewId": preview_id,
+                        "previewImageUrl": preview_image_url,
+                        "savedAt": int(datetime.now(timezone.utc).timestamp() * 1000),
+                    }
+                    _saved_styles_store[new_id] = record
+                    return {"isSaved": True, "id": new_id}
+        else:
+            res = self.real_client.mutation(
+                "saved_styles:toggleSavedStyle",
+                {
+                    "userId": user_id,
+                    "hairstyleId": hairstyle_id,
+                    "hairstyleName": hairstyle_name,
+                    "imageUrl": image_url,
+                    "previewId": preview_id,
+                    "previewImageUrl": preview_image_url,
+                },
+            )
+            return dict(res)
+
+    def remove_saved_style(self, id: str) -> dict[str, Any]:
+        """Remove a saved style by its document ID."""
+        if self.is_mock:
+            with _lock:
+                _saved_styles_store.pop(id, None)
+            return {"success": True}
+        else:
+            res = self.real_client.mutation(
+                "saved_styles:removeSavedStyle", {"id": id}
+            )
+            return dict(res)

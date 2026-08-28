@@ -389,16 +389,20 @@ class ConvexClient:
                     _saved_styles_store[new_id] = record
                     return {"isSaved": True, "id": new_id}
         else:
+            args: dict[str, Any] = {
+                "userId": user_id,
+                "hairstyleId": hairstyle_id,
+                "hairstyleName": hairstyle_name,
+                "imageUrl": image_url,
+            }
+            if preview_id:
+                args["previewId"] = preview_id
+            if preview_image_url:
+                args["previewImageUrl"] = preview_image_url
+
             res = self.real_client.mutation(
                 "saved_styles:toggleSavedStyle",
-                {
-                    "userId": user_id,
-                    "hairstyleId": hairstyle_id,
-                    "hairstyleName": hairstyle_name,
-                    "imageUrl": image_url,
-                    "previewId": preview_id,
-                    "previewImageUrl": preview_image_url,
-                },
+                args,
             )
             return dict(res)
 

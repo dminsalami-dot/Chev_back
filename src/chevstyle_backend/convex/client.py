@@ -131,9 +131,11 @@ class ConvexClient:
         else:
             payload: dict[str, Any] = {
                 "clerk_user_id": clerk_user_id,
-                "full_name": full_name,
-                "notification_prefs": notification_prefs,
             }
+            if full_name is not None:
+                payload["full_name"] = full_name
+            if notification_prefs is not None:
+                payload["notification_prefs"] = notification_prefs
             if gender is not None:
                 payload["gender"] = gender
             if style_preferences is not None:

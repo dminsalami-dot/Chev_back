@@ -1,7 +1,7 @@
 # Multi-stage production Dockerfile for FastAPI backend using uv
 FROM python:3.13-slim
 
-# Install system dependencies required for OpenCV, MediaPipe, and Pillow
+# Install system dependencies required for OpenCV, MediaPipe, Pillow, and cairosvg
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -9,6 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libgomp1 \
     curl \
+    libcairo2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv by copying binary from official uv image

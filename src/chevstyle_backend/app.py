@@ -10,6 +10,7 @@ from chevstyle_backend.routers.auth import router as auth_router
 from chevstyle_backend.routers.images import router as images_router
 from chevstyle_backend.routers.hairstyles import router as hairstyles_router
 from chevstyle_backend.routers.saved_styles import router as saved_styles_router
+from chevstyle_backend.routers.previews import router as previews_router
 
 # Setup logger
 logger = logging.getLogger("chevstyle_backend")
@@ -61,6 +62,7 @@ app.include_router(auth_router)
 app.include_router(images_router)
 app.include_router(hairstyles_router)
 app.include_router(saved_styles_router)
+app.include_router(previews_router)
 
 
 @app.get("/")

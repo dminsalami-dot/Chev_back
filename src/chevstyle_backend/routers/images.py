@@ -136,6 +136,7 @@ async def upload_image(
             face_verification_score=None,
             hair_bounding_box=segmentation_result.bbox.model_dump(),
             hair_segmentation_confidence=None,
+            hair_segmentation_path=segmentation_result.path,
             image_metadata=metadata.model_dump(),
             consent_given=True,
             image_validated=True,

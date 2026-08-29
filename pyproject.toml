@@ -22,7 +22,8 @@ dependencies = [
     "google-genai>=2.18.0",
     "moondream>=2.0.1",
     "tqdm>=4.66.0",
-    "openai>=3.5.0",
+    "openai>=1.52.0",
+    "cairosvg>=2.7.0",
 ]
 
 [project.optional-dependencies]

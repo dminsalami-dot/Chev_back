@@ -13,6 +13,7 @@ _store: dict[str, dict[str, Any]] = {}
 _image_store: dict[str, dict[str, Any]] = {}
 _hairstyle_store: dict[str, dict[str, Any]] = {}
 _saved_styles_store: dict[str, dict[str, Any]] = {}
+_generation_job_store: dict[str, dict[str, Any]] = {}
 _lock = threading.Lock()
 
 
@@ -215,6 +216,7 @@ class ConvexClient:
         hair_bounding_box: dict | None,
         hair_segmentation_confidence: float | None,
         image_metadata: dict,
+        hair_segmentation_path: str | None = None,
         consent_given: bool = True,
         image_validated: bool = False,
     ) -> dict[str, Any]:
@@ -231,6 +233,7 @@ class ConvexClient:
                 "face_verification_score": face_verification_score,
                 "hair_bounding_box": hair_bounding_box,
                 "hair_segmentation_confidence": hair_segmentation_confidence,
+                "hair_segmentation_path": hair_segmentation_path,
                 "image_metadata": image_metadata,
                 "consent_given": consent_given,
                 "image_validated": image_validated,
@@ -251,6 +254,7 @@ class ConvexClient:
                     "face_verification_score": face_verification_score,
                     "hair_bounding_box": hair_bounding_box,
                     "hair_segmentation_confidence": hair_segmentation_confidence,
+                    "hair_segmentation_path": hair_segmentation_path,
                     "image_metadata": image_metadata,
                     "consent_given": consent_given,
                     "image_validated": image_validated,
@@ -475,3 +479,119 @@ class ConvexClient:
                 "saved_styles:removeSavedStyle", {"id": id}
             )
             return dict(res)
+
+    # ------------------------------------------------------------------ #
+    #  Generation Jobs                                                    #
+    # ------------------------------------------------------------------ #
+
+    def create_generation_job(
+        self,
+        user_id: str,
+        source_image_id: str,
+        hairstyle_id: str,
+    ) -> dict[str, Any]:
+        """Create a new generation job record with status='queued'. Returns {id, ...}."""
+        if self.is_mock:
+            import uuid
+            job_id = f"job_{uuid.uuid4().hex[:8]}"
+            now = datetime.now(timezone.utc).isoformat()
+            record = {
+                "_id": job_id,
+                "user_id": user_id,
+                "source_image_id": source_image_id,
+                "hairstyle_id": hairstyle_id,
+                "status": "queued",
+                "model_used": None,
+                "result_storage_id": None,
+                "result_url": None,
+                "error_message": None,
+                "attempt_count": 0,
+                "created_at": now,
+                "updated_at": now,
+            }
+            with _lock:
+                _generation_job_store[job_id] = record
+            logger.debug(f"[Convex Mock] Created generation job: {job_id}")
+            return {"id": job_id, "record": record}
+        else:
+            res = self.real_client.mutation(
+                "generation_jobs:create",
+                {
+                    "user_id": user_id,
+                    "source_image_id": source_image_id,
+                    "hairstyle_id": hairstyle_id,
+                },
+            )
+            return dict(res)
+
+    def update_generation_job(
+        self,
+        job_id: str,
+        status: str,
+        model_used: str | None = None,
+        result_storage_id: str | None = None,
+        result_url: str | None = None,
+        error_message: str | None = None,
+        attempt_count: int | None = None,
+    ) -> None:
+        """Patch a generation job's status and optional result/error fields."""
+        if self.is_mock:
+            with _lock:
+                record = _generation_job_store.get(job_id)
+                if record is None:
+                    logger.warning(f"[Convex Mock] Generation job not found: {job_id}")
+                    return
+                record["status"] = status
+                record["updated_at"] = datetime.now(timezone.utc).isoformat()
+                if model_used is not None:
+                    record["model_used"] = model_used
+                if result_storage_id is not None:
+                    record["result_storage_id"] = result_storage_id
+                if result_url is not None:
+                    record["result_url"] = result_url
+                if error_message is not None:
+                    record["error_message"] = error_message
+                if attempt_count is not None:
+                    record["attempt_count"] = attempt_count
+            logger.debug(f"[Convex Mock] Updated generation job {job_id}: status={status}")
+        else:
+            payload: dict[str, Any] = {"job_id": job_id, "status": status}
+            if model_used is not None:
+                payload["model_used"] = model_used
+            if result_storage_id is not None:
+                payload["result_storage_id"] = result_storage_id
+            if result_url is not None:
+                payload["result_url"] = result_url
+            if error_message is not None:
+                payload["error_message"] = error_message
+            if attempt_count is not None:
+                payload["attempt_count"] = attempt_count
+            self.real_client.mutation("generation_jobs:update_status", payload)
+
+    def get_generation_job(self, job_id: str) -> dict[str, Any] | None:
+        """Return a single generation job by its document ID."""
+        if self.is_mock:
+            with _lock:
+                record = _generation_job_store.get(job_id)
+            return dict(record) if record else None
+        else:
+            res = self.real_client.query(
+                "generation_jobs:get", {"job_id": job_id}
+            )
+            return dict(res) if res else None
+
+    def list_generation_jobs(self, user_id: str) -> list[dict[str, Any]]:
+        """Return all generation jobs for a user (newest first in mock)."""
+        if self.is_mock:
+            with _lock:
+                jobs = [
+                    dict(j) for j in _generation_job_store.values()
+                    if j.get("user_id") == user_id
+                ]
+            jobs.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            return jobs
+        else:
+            results = self.real_client.query(
+                "generation_jobs:list_by_user", {"user_id": user_id}
+            )
+            return [dict(r) for r in results]

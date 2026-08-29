@@ -88,9 +88,13 @@ def generate_with_openai(
     mask_file.name = "mask.png"
 
     if hairstyle_image_bytes:
+        hairstyle_file = io.BytesIO(hairstyle_image_bytes)
+        hairstyle_file.name = "hairstyle.png"
+        image_input = [portrait_file, hairstyle_file]
         prompt = _EDIT_PROMPT
         logger.info("[OpenAIGenerator] Using multi-image edit mode with reference hairstyle.")
     else:
+        image_input = portrait_file
         prompt = _EDIT_PROMPT_TEXT_ONLY.format(
             description=hairstyle_description,
             stylist_specs=hairstyle_stylist_specs,
@@ -100,20 +104,25 @@ def generate_with_openai(
     logger.info(f"[OpenAIGenerator] Calling images.edit | timeout={_timeout}s")
 
     response = client.images.edit(
-        model="gpt-image-1",
-        image=portrait_file,
+        model="gpt-image-2",
+        image=image_input,
         mask=mask_file,
         prompt=prompt,
         n=1,
         size="1024x1024",
-        response_format="b64_json",
     )
 
-    b64_data = response.data[0].b64_json
-    if not b64_data:
-        raise ValueError("[OpenAIGenerator] OpenAI returned empty b64_json.")
+    item = response.data[0]
+    if getattr(item, "b64_json", None):
+        result_bytes = base64.b64decode(item.b64_json)
+    elif getattr(item, "url", None):
+        logger.info(f"[OpenAIGenerator] Downloading result from URL: {item.url}")
+        resp = httpx.get(item.url, timeout=30.0)
+        resp.raise_for_status()
+        result_bytes = resp.content
+    else:
+        raise ValueError("[OpenAIGenerator] OpenAI returned neither b64_json nor url.")
 
-    result_bytes = base64.b64decode(b64_data)
     logger.info(
         f"[OpenAIGenerator] Success — result image size: {len(result_bytes)} bytes"
     )

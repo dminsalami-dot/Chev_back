@@ -121,6 +121,7 @@ async def run_generation_job(
                 "proceeding without explicit mask."
             )
 
+        hairstyle_name = hairstyle_record.get("name", "")
         hairstyle_description = hairstyle_record.get("description", "")
         hairstyle_stylist_specs = hairstyle_record.get("stylistSpecs", "")
 
@@ -137,6 +138,7 @@ async def run_generation_job(
                     portrait_bytes=portrait_bytes,
                     mask_bytes=mask_bytes,
                     hairstyle_image_bytes=hairstyle_bytes,
+                    hairstyle_name=hairstyle_name,
                     hairstyle_description=hairstyle_description,
                     hairstyle_stylist_specs=hairstyle_stylist_specs,
                     timeout=settings.openai_generation_timeout_seconds,
@@ -156,6 +158,7 @@ async def run_generation_job(
             result_bytes = generate_with_gemini(
                 portrait_bytes=portrait_bytes,
                 hairstyle_image_bytes=hairstyle_bytes,
+                hairstyle_name=hairstyle_name,
                 hairstyle_description=hairstyle_description,
                 hairstyle_stylist_specs=hairstyle_stylist_specs,
             )

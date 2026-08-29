@@ -28,28 +28,53 @@ from chevstyle_backend.config import settings
 logger = logging.getLogger("chevstyle_backend.vision.generation.gemini")
 
 _PROMPT = (
-    "You are an expert realistic portrait retoucher. "
-    "Using Image 1 as the primary portrait and Image 2 as the hairstyle reference: "
-    "Generate a photorealistic portrait of the person in Image 1 having their "
-    "hairstyle replaced with the hairstyle shown in Image 2. "
-    "Preserve the exact facial identity, eye gaze direction, skin tone, "
-    "clothing, lighting conditions, and background of Image 1 with zero alterations. "
-    "Output only the edited portrait image."
+    "Virtual Hairstyle Try-On Task:\n\n"
+    "You are given two images:\n"
+    "- Image 1: The user's portrait (Base Subject).\n"
+    "- Image 2: Reference photo for the hairstyle '{name}'.\n\n"
+    "YOUR TASK:\n"
+    "Generate a photorealistic portrait of the EXACT SAME PERSON from Image 1, "
+    "having their hairstyle replaced with the haircut/hairstyle shown in Image 2.\n"
+    "{details}"
+    "\nSTRICT REQUIREMENTS:\n"
+    "1. SUBJECT IDENTITY (IMAGE 1 ONLY):\n"
+    "   - The person in the output MUST be the person from Image 1.\n"
+    "   - You MUST keep their exact facial features, facial structure, eyes, nose, mouth, "
+    "skin tone, age, gender, facial hair, expression, head posture, clothing, lighting, "
+    "and background 100% UNCHANGED from Image 1.\n"
+    "2. HAIRSTYLE (IMAGE 2 ONLY):\n"
+    "   - Replace ONLY the hair on the subject's head with the haircut, texture, curl pattern, "
+    "length, fade/taper, volume, and color shown in Image 2.\n"
+    "   - Seamlessly blend the new hairstyle into the subject's scalp and natural hairline.\n"
+    "3. DO NOT USE THE FACE OR IDENTITY FROM IMAGE 2:\n"
+    "   - Image 2 is STRICTLY a reference for the hair cut and style. DO NOT render the person, "
+    "face, or background from Image 2.\n\n"
+    "Output ONLY the final edited portrait."
 )
 
 _PROMPT_TEXT_ONLY = (
-    "You are an expert realistic portrait retoucher. "
-    "Precisely edit the hairstyle in Image 1 to match this description: {description}. "
-    "Stylist specifications: {stylist_specs}. "
-    "Preserve the exact facial identity, eye gaze direction, skin tone, "
-    "clothing, lighting conditions, and background with zero alterations. "
-    "Output only the edited portrait image."
+    "Virtual Hairstyle Try-On Task:\n\n"
+    "You are given Image 1 which is the user's portrait.\n\n"
+    "YOUR TASK:\n"
+    "Generate a photorealistic portrait of the EXACT SAME PERSON from Image 1, "
+    "having their hairstyle changed to '{name}'.\n"
+    "{details}"
+    "\nSTRICT REQUIREMENTS:\n"
+    "1. SUBJECT IDENTITY:\n"
+    "   - The person in the output MUST be the person from Image 1.\n"
+    "   - You MUST keep their exact facial features, facial structure, eyes, nose, mouth, "
+    "skin tone, age, gender, facial hair, expression, head posture, clothing, lighting, "
+    "and background 100% UNCHANGED from Image 1.\n"
+    "2. HAIRSTYLE:\n"
+    "   - Apply the specified hairstyle naturally to the subject's head and hairline.\n\n"
+    "Output ONLY the final edited portrait."
 )
 
 
 def generate_with_gemini(
     portrait_bytes: bytes,
     hairstyle_image_bytes: bytes | None,
+    hairstyle_name: str = "",
     hairstyle_description: str = "",
     hairstyle_stylist_specs: str = "",
 ) -> bytes:
@@ -73,13 +98,22 @@ def generate_with_gemini(
     """
     client = genai.Client(api_key=settings.gemini_api_key)
 
+    details_text = ""
+    if hairstyle_description:
+        details_text += f"- Style description: {hairstyle_description}\n"
+    if hairstyle_stylist_specs:
+        details_text += f"- Stylist specs: {hairstyle_stylist_specs}\n"
+
     if hairstyle_image_bytes:
-        prompt_text = _PROMPT
+        prompt_text = _PROMPT.format(
+            name=hairstyle_name or "Target Hairstyle",
+            details=details_text,
+        )
         logger.info("[GeminiGenerator] Using multi-image generation with reference.")
     else:
         prompt_text = _PROMPT_TEXT_ONLY.format(
-            description=hairstyle_description,
-            stylist_specs=hairstyle_stylist_specs,
+            name=hairstyle_name or "Target Hairstyle",
+            details=details_text,
         )
         logger.info("[GeminiGenerator] Using text-only prompt (no reference image).")
 

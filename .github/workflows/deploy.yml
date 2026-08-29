@@ -38,6 +38,14 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install System Dependencies (cairosvg native libs)
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+            libcairo2 \
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libgdk-pixbuf2.0-0
+
       - name: Install Dependencies
         run: uv sync --extra dev
 

@@ -104,7 +104,7 @@ def generate_with_openai(
     logger.info(f"[OpenAIGenerator] Calling images.edit | timeout={_timeout}s")
 
     response = client.images.edit(
-        model="gpt-image-1",
+        model="gpt-image-2",
         image=image_input,
         mask=mask_file,
         prompt=prompt,

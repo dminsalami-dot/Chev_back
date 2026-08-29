@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     # AI Generation
     ai_provider: str = Field(default="gemini")
     ai_generation_timeout_seconds: int = Field(default=120)
+    openai_generation_timeout_seconds: int = Field(default=25)
 
     model_config = SettingsConfigDict(
         env_file=".env",

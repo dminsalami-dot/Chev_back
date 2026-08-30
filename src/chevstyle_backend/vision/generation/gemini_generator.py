@@ -27,6 +27,8 @@ from chevstyle_backend.config import settings
 
 logger = logging.getLogger("chevstyle_backend.vision.generation.gemini")
 
+_GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image"
+
 _PROMPT = (
     "Virtual Hairstyle Try-On Task:\n\n"
     "You are given two images:\n"
@@ -138,10 +140,10 @@ def generate_with_gemini(
             )
         )
 
-    logger.info("[GeminiGenerator] Calling gemini-2.0-flash-preview-image-generation")
+    logger.info(f"[GeminiGenerator] Calling {_GEMINI_IMAGE_MODEL}")
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash-preview-image-generation",
+        model=_GEMINI_IMAGE_MODEL,
         contents=parts,
         config=types.GenerateContentConfig(
             response_modalities=["IMAGE", "TEXT"],
